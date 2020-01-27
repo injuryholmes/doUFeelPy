@@ -32,11 +32,16 @@ class Sequence(nn.Module):
         h_t2 = torch.zeros(input.size(0), 51, dtype=torch.double)
         c_t2 = torch.zeros(input.size(0), 51, dtype=torch.double)
 
+        # chunk完了之后就是一个tuple,len=999，每个element是一个[97,1]的tensor
+        # batch size = 97
         for i, input_t in enumerate(input.chunk(input.size(1), dim=1)):
             # 调用LSTMCell()的时候，实际上最后调用的LSTMCell.forward()函数，并在内部解决了tracking和hooks
             # input: tensor containing input features
             # h_t: tensor containing the hidden state at time t for each element in the batch.
             # c_t: tensor containing the cell state at time t for each element in the batch.
+            # embed()
+            # h_t: [97,51]
+            # c_t: [97, 51]
             h_t, c_t = self.lstm1(input_t, (h_t, c_t))
             # 上一个lstmCell的hidden state h_t作为下一个lstmCell的input 
             h_t2, c_t2 = self.lstm2(h_t, (h_t2, c_t2)) 
@@ -58,10 +63,11 @@ if __name__ == '__main__':
     torch.manual_seed(0)
     # load data and make training set
     data = torch.load('traindata.pt')
-    input = torch.from_numpy(data[3:, :-1]) # train data input
-    target = torch.from_numpy(data[3:, 1:]) # train data labels
-    test_input = torch.from_numpy(data[:3, :-1]) # test data input
-    test_target = torch.from_numpy(data[:3, 1:]) # test data labels
+    # 每一秒都产生了100个数据，产生了999秒组数据
+    input = torch.from_numpy(data[3:, :-1]) # train data input; [97,999]
+    target = torch.from_numpy(data[3:, 1:]) # train data labels; [97,999]
+    test_input = torch.from_numpy(data[:3, :-1]) # test data input; [3,999]
+    test_target = torch.from_numpy(data[:3, 1:]) # test data labels; [3,999]
     # build the model
     seq = Sequence()
     seq.double()
@@ -73,7 +79,7 @@ if __name__ == '__main__':
     for i in range(15):
         print('STEP: ', i)
         def closure():
-            optimizer.zero_grad()
+            optimizer.zero_grad() # zero_grad(): Sets gradients of all model parameters to zero.
             out = seq(input)
             loss = criterion(out, target)
             print('loss:', loss.item())
@@ -81,7 +87,7 @@ if __name__ == '__main__':
             return loss
         optimizer.step(closure)
         # begin to predict, no need to track gradient here
-        with torch.no_grad():
+        with torch.no_grad(): # no_grad() set the requires_grad=False
             future = 1000
             pred = seq(test_input, future=future)
             loss = criterion(pred[:, :-future], test_target)
